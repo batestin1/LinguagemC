@@ -1,0 +1,26 @@
+# ----------------------------------------------------------------------------
+#  Publish Docker image from the current master branch into Github repository
+# ----------------------------------------------------------------------------
+
+name: publish-unstable
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  docker-publish-unstable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: docker/build-push-action@v1
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          add_git_labels: true
+          tags: dev
+
+          registry: docker.pkg.github.com
+          repository: ${{ github.REPOSITORY }}/cloud-game

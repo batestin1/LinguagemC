@@ -1,0 +1,11 @@
+corange.dll
+corange.lib
+corange.res
+libcorange.so
+libcorange.a
+*~
+*.o
+*.log
+*.exe
+stdout.txt
+stderr.txt

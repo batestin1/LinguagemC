@@ -1,0 +1,116 @@
+# ------------------------------------------------------------
+#  Build workflow (Linux x64, macOS x64, Windows x64)
+# ------------------------------------------------------------
+
+name: build
+on:
+  push:
+    branches:
+      - master
+    tags-ignore:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+
+jobs:
+
+  build:
+    name: Build
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        step: [ build, check ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+
+      - name: Get Linux dev libraries and tools
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y make pkg-config libvpx-dev libx264-dev libopus-dev libsdl2-dev libgl1-mesa-glx
+
+      - name: Get MacOS dev libraries and tools
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install pkg-config libvpx x264 opus sdl2
+
+      - name: Get Windows dev libraries and tools
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          release: false
+          install: >
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-dlfcn
+            mingw-w64-x86_64-libvpx
+            mingw-w64-x86_64-opus
+            mingw-w64-x86_64-x264-git
+            mingw-w64-x86_64-SDL2
+
+      - name: Get Windows OpenGL drivers
+        if: matrix.step == 'check' && matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          wget -q https://github.com/pal1000/mesa-dist-win/releases/download/20.2.1/mesa3d-20.2.1-release-mingw.7z
+          "/c/Program Files/7-Zip/7z.exe" x mesa3d-20.2.1-release-mingw.7z -omesa
+          echo -e " 2\r\n 8\r\n " >> commands
+          ./mesa/systemwidedeploy.cmd < ./commands
+
+      - name: Build Windows app
+        if: matrix.step == 'build' && matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          make build
+
+      - name: Build Linux app
+        if: matrix.step == 'build' && matrix.os == 'ubuntu-latest'
+        run: |
+          make build
+
+      - name: Build macOS app
+        if: matrix.step == 'build' && matrix.os == 'macos-latest'
+        run: |
+          make build
+
+      - name: Verify core rendering (windows-latest)
+        if: matrix.step == 'check' && matrix.os == 'windows-latest' && always()
+        shell: msys2 {0}
+        env:
+          MESA_GL_VERSION_OVERRIDE: 3.3COMPAT
+        run: |
+          GL_CTX=-autoGlContext make verify-cores
+
+      - name: Verify core rendering (ubuntu-latest)
+        if: matrix.step == 'check' && matrix.os == 'ubuntu-latest' && always()
+        env:
+          MESA_GL_VERSION_OVERRIDE: 3.3COMPAT
+        run: |
+          GL_CTX=-autoGlContext xvfb-run --auto-servernum make verify-cores
+
+      - name: Verify core rendering (macos-latest)
+        if: matrix.step == 'check' && matrix.os == 'macos-latest' && always()
+        run: |
+          make verify-cores
+
+      - uses: actions/upload-artifact@v2
+        if: matrix.step == 'check' && always()
+        with:
+          name: emulator-test-frames
+          path: _rendered/*.png
+
+  build_docker:
+    name: Build (docker)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v2
+      - run: docker build .

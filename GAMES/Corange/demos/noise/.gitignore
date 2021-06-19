@@ -1,0 +1,7 @@
+noise
+noise.exe
+lib/*.*
+*~
+*.o
+stdout.txt
+stderr.txt
